@@ -1,0 +1,6 @@
+*.sublime*
+python-chess/
+__pycache__/
+*.pyc
+*.h5
+*.out
