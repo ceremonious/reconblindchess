@@ -74,7 +74,7 @@ class ChessModel:
         output = Reshape((8, 8, 13))(output)
 
         model = Model(inputs=[main_input, scalar_input], outputs=[output])
-        sgd = optimizers.SGD(lr=0.1)
+        sgd = optimizers.SGD(lr=0.0005)
         model.compile(loss='kld', optimizer=sgd)
         return model
 
@@ -160,10 +160,10 @@ class ChessModel:
     def load_all(self):
         self.move_policy = load_model('move_policy.h5')
         self.sense_policy = load_model('sense_policy.h5')
-        self.belief_state = load_model('belief_state.h5')
+        self.belief_state = load_model('belief_state_lr0005.h5')
 
     def save_belief(self):
-        self.belief_state.save('belief_state.h5')
+        self.belief_state.save('belief_state_lr001.h5')
 
     def __build_train_fn(self, model):
         """Create a train function

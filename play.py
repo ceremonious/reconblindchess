@@ -3,7 +3,7 @@ from chess import SQUARE_NAMES, Move
 from reconBoard import ReconBoard
 import numpy as np
 np.random.seed(4)
-np.set_printoptions(threshold=np.nan, linewidth=200, suppress=True)
+np.set_printoptions(threshold=np.nan, linewidth=1000, suppress=True)
 
 def test_belief_state(load_from_file=True):
     model = ChessModel(load_from_file)
@@ -34,19 +34,21 @@ def test_belief_state(load_from_file=True):
         print("{} observing at square {}".format(color_name, SQUARE_NAMES[square]))
 
         # Update belief state based on where we sense
-        if ply_num == 7:
-            print(board)
-            old = np.round(board.belief_state[False], 2)
         observation = board.sense(square)
         # print(observation)
         belief_input = np.concatenate((board.belief_state[board.turn], observation),
                                       axis=2)
+
+        if board.turn and ply_num == 6:
+            print(observation)
+            print(belief_input)
+            old = board.belief_state[board.turn]
         board.belief_state[board.turn] = model.update_belief_state_multi(belief_input,
                                                                          scalar_input)
+        if board.turn and ply_num == 6:
+            print(board.belief_state[board.turn])
+            print(board.belief_state[board.turn] - old)
 
-        if ply_num == 7:
-            print(board)
-            print(np.round(board.belief_state[False] - old, 2))
         # if ply_num == 7:
         #     print(np.round(board.belief_state[False], 2) - old)
 
@@ -63,7 +65,6 @@ def test_belief_state(load_from_file=True):
 def simple_test():
     model = ChessModel(True)
     board = ReconBoard()
-    print(board.belief_state[True])
     observation = board.sense(50)
     belief_input = np.concatenate((board.belief_state[board.turn], observation),
                                    axis=2)
@@ -122,6 +123,7 @@ def play():
         board.push(move)
 
 if __name__ == '__main__':
+    # test_belief_state(True)
     simple_test()
     """model = ChessModel(True)
     board = ReconBoard()

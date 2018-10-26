@@ -9,7 +9,7 @@ import threading
 import numpy as np
 import json
 import h5py
-np.random.seed(1225)
+np.random.seed(2133)
 np.set_printoptions(threshold=np.nan, linewidth=2000, suppress=True)
 
 
@@ -89,7 +89,7 @@ def train_model():
     should_play = Value('i', 1)
 
     num_processes = 4
-    train_iteration = 25
+    train_iteration = 10
     save_iteration = 2000
     model = ChessModel(False)
 
@@ -124,13 +124,16 @@ def train_model():
             belief_input = np.concatenate(tuple(belief_input))
             scalar_input = np.concatenate(tuple(scalar_input))
             _output = np.concatenate(tuple(_output))
+            print(np.round(belief_input[312], 2))
+            print(np.round(_output[312]), 2)
+            exit()
 
             result = model.train_belief_state(belief_input, scalar_input, _output)
             loss_over_time.append(result.history['val_loss'][0])
             print(result.history['val_loss'][0])
 
             if num_trained % save_iteration == 0:
-                print("saving")
+                print("Saving old")
                 print(loss_over_time)
                 model.save_belief()
 
