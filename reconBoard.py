@@ -338,10 +338,14 @@ class ReconBoard(Board):
         # Returns numpy version of board with only pieces in
         return self.get_current_state(self.turn, mask)
 
+    def my_pieces_observation(self, color):
+        return self.get_current_state(color, mask=self.occupied_co[color])
+
 
     def get_current_state(self, color, mask=BB_ALL):
+        ranks = range(8) if color else range(7, -1, -1)
         squares = []
-        for i in range(8):
+        for i in ranks:
             row = []
             for j in range(8):
                 square = i * 8 + j

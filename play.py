@@ -2,74 +2,68 @@ from models import ChessModel
 from chess import SQUARE_NAMES, Move
 from reconBoard import ReconBoard
 import numpy as np
-np.random.seed(4)
+np.random.seed(5)
 np.set_printoptions(threshold=np.nan, linewidth=1000, suppress=True)
 
 def test_belief_state(load_from_file=True):
-    model = ChessModel(load_from_file)
+    models = [ChessModel(load_from_file), ChessModel(load_from_file)]
     board = ReconBoard()
     ply_num = 0
 
     moves = ["e2e4", "e7e5", "f1b5", "c7c6", "g1f3", "d7d6", "e1g1"]
     sensing = [50, 50, 50, 50, 50, 50, 50, 5]
     while not board.is_game_over():
+
         color_name = "White" if board.turn else "Black"
         true_state = board.get_current_state(board.turn)
         previous_sense = board.get_previous_sense()
-        scalar_input = np.array([previous_sense, ply_num])
 
-        # Update our belief state based on the results of the last two ply
-        if ply_num > 0:
-            observation = board.observation[board.turn]
-            belief_input = np.concatenate((board.belief_state[board.turn], observation),
-                                          axis=2)
+        observation = np.add(board.observation[board.turn],
+                             board.my_pieces_observation(board.turn))
 
-            board.belief_state[board.turn] = model.update_belief_state_multi(belief_input,
-                                                                             scalar_input)
+        starting_board_state = models[board.turn].get_belief_state(observation)
+        # if ply_num == 7:
+        #     print(board)
+        #     old = board_state
 
         # Choose where to sense based on policy or exploration
-        # square = np.random.randint(64)
-        square = sensing[ply_num]
+        square = np.random.randint(64) # sensing[ply_num]
 
         print("{} observing at square {}".format(color_name, SQUARE_NAMES[square]))
 
         # Update belief state based on where we sense
         observation = board.sense(square)
-        # print(observation)
-        belief_input = np.concatenate((board.belief_state[board.turn], observation),
-                                      axis=2)
 
-        if board.turn and ply_num == 6:
-            print(observation)
-            print(belief_input)
-            old = board.belief_state[board.turn]
-        board.belief_state[board.turn] = model.update_belief_state_multi(belief_input,
-                                                                         scalar_input)
-        if board.turn and ply_num == 6:
-            print(board.belief_state[board.turn])
-            print(board.belief_state[board.turn] - old)
+        next_board_state = models[board.turn].get_belief_state(observation)
 
-        # if ply_num == 7:
-        #     print(np.round(board.belief_state[False], 2) - old)
+        print(np.round(next_board_state - starting_board_state), 3)
 
         legal_moves = board.get_pseudo_legal_moves()
-        # move = np.random.choice(legal_moves)
-        move = Move.from_uci(moves[ply_num])
+        move = np.random.choice(legal_moves) # Move.from_uci(moves[ply_num])
 
         print("{} making move {}".format(color_name, str(move)))
 
         board.push(move)
-
         ply_num += 1
 
+
 def simple_test():
-    model = ChessModel(True)
+    model = ChessModel(True, training=False)
     board = ReconBoard()
-    observation = board.sense(50)
-    belief_input = np.concatenate((board.belief_state[board.turn], observation),
-                                   axis=2)
-    scalar_input = np.array([0, 0])
-    print(model.update_belief_state_multi(belief_input, scalar_input))
+    # observation = board.my_pieces_observation(board.turn)
+    observation = board.get_current_state(True)
+    model.get_belief_state(observation)
+
+    board.sense(3)
+    board.push(Move.from_uci("e2e4"))
+
+    observation = board.my_pieces_observation(board.turn)
+    pre_sense = np.round(model.get_belief_state(observation), 3)
+    print(pre_sense)
+    observation = board.sense(28)
+
+    post_sense = np.round(model.get_belief_state(observation), 3)
+    print(post_sense)
 
 
 def play():
@@ -123,8 +117,17 @@ def play():
         board.push(move)
 
 if __name__ == '__main__':
-    # test_belief_state(True)
     simple_test()
+    # test_belief_state()
+    # model = ChessModel(True)
+    # print(board.get_current_state(False))
+    """board = ReconBoard()
+    observation = board.sense(2)
+    _input = np.array([[observation]])
+    print(_input.shape)
+    print(model.belief_state.predict(_input))
+    # test_belief_state(True)
+    # simple_test()"""
     """model = ChessModel(True)
     board = ReconBoard()
     board.push(Move.from_uci("e2e4"))

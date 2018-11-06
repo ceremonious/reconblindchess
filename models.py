@@ -1,6 +1,7 @@
 from keras.models import Model, Sequential, load_model
-from keras.layers import Input, Dense, Conv2D, BatchNormalization, Activation, Flatten, Add, TimeDistributed, LSTM, MaxPooling2D, Reshape
+from keras.layers import Input, Dense, Conv2D, BatchNormalization, Activation, Flatten, Add, TimeDistributed, LSTM, MaxPooling2D, Reshape, ConvLSTM2D
 from keras import regularizers, utils, optimizers
+from keras.preprocessing import sequence
 from keras import backend as K
 from reconBoard import ReconBoard
 from chess import Move, SQUARE_NAMES
@@ -14,7 +15,9 @@ set_random_seed(2)
 K.clear_session()
 
 class ChessModel:
-    def __init__(self, load_from_file=False):
+    def __init__(self, load_from_file=False, training=True):
+        self.training = training
+
         if load_from_file:
             self.load_all()
         else:
@@ -33,62 +36,75 @@ class ChessModel:
         self.session = K.get_session()
         self.graph = tf.get_default_graph()
 
-        # plot_model(self.belief_state, to_file='model.png')
+        plot_model(self.belief_state, to_file='model.png')
         # print(self.belief_state.summary())
 
 
-    # 8x8 board with 26 channels (13 channels from old belief state, 13 from observation)
-    # 8x8x13 belief state
-    def build_belief_state_network(self):
-        input_shape = (8, 8, 26)
+    # 8x8 observation with 13 channels
+    def build_belief_state_network(self, stateful=False):
+        input_shape = (8, 8, 13)
 
-        # Convolutional part
-        main_input = Input(shape=input_shape, name='belief_input')
-        cnn = (Conv2D(10, (2,2),
-                          activation='relu',
-                          data_format="channels_last",
-                          padding='same',
-                          kernel_regularizer=regularizers.l2(0.01)))(main_input)
-        for i in range(5):
-            for i in range(3):
-                cnn = (Conv2D(10, (2,2),
-                              activation='relu',
-                              data_format="channels_last",
-                              padding='same',
-                              kernel_regularizer=regularizers.l2(0.01)))(cnn)
-            cnn = MaxPooling2D(pool_size=(2, 2),
-                               data_format="channels_last",
-                               padding='same')(cnn)
-        cnn = Flatten()(cnn)
+        # Convolutional part for each timestep
+        # cnn = Sequential()
+        # cnn.add(Conv2D(384, (2,2),
+        #               activation='relu',
+        #               data_format="channels_last",
+        #               padding='same',
+        #               kernel_regularizer=regularizers.l2(0.01),
+        #               input_shape=input_shape))
+        # cnn.add(Flatten())
 
-        # Input for previous sense and ply num
-        scalar_input = Input(shape=(2,), name='scalar_input')
-        merge = concatenate([cnn, scalar_input])
+        model = Sequential()
+        # if stateful:
+        #     model.add(TimeDistributed(cnn, input_shape=(None, 8, 8, 13),
+        #                               batch_input_shape=(1, 1, 8, 8, 13)))
+        # else:
+        #     model.add(TimeDistributed(cnn, input_shape=(None, 8, 8, 13)))
+        if stateful:
+            model.add(ConvLSTM2D(64, (1, 1), return_sequences=True, stateful=stateful,
+                           input_shape=(None, 8, 8, 13), batch_input_shape=(1, 1, 8, 8, 13)))
+        else:
+            model.add(ConvLSTM2D(64, (1, 1), return_sequences=True, stateful=stateful,
+                           input_shape=(None, 8, 8, 13)))
+        # model.add(LSTM(384, return_sequences=True, stateful=stateful))
+        # model.add(LSTM(384, return_sequences=True, stateful=stateful))
+        # model.add(LSTM(384, return_sequences=True, stateful=stateful))
+        model.add(ConvLSTM2D(64, (1, 1), return_sequences=True, stateful=stateful))
+        model.add(ConvLSTM2D(64, (1, 1), return_sequences=True, stateful=stateful))
+        model.add(Dense(1000))
+        model.add(Dense(1000))
+        model.add(Dense(13))
+        model.add(Activation('softmax'))
+        model.add(TimeDistributed(Reshape((8, 8, 13)), input_shape=(None, 8, 8, 13)))
+        # for i in range(1):
+        #     model.add(Dense(1000))
 
-        for i in range(3):
-            merge = Dense(1000)(merge)
+        # model.add(Dense(64 * 13))
+        # print(model._keras_shape)
 
-        output = Dense(8 * 8 * 13)(merge)
-        output = Reshape((64, 13))(output)
-        output = Activation('softmax')(output)
-        output = Reshape((8, 8, 13))(output)
+        # # Reshaping for each timestep
+        # reshape = Sequential()
+        # reshape.add(Reshape((64, 13)))
+        # reshape.add(Activation('softmax'))
+        # reshape.add(Reshape((8, 8, 13)))
 
-        model = Model(inputs=[main_input, scalar_input], outputs=[output])
-        sgd = optimizers.SGD(lr=0.0005)
-        model.compile(loss='kld', optimizer=sgd)
+        # model.add(TimeDistributed(reshape, input_shape=(None, 64 * 13)))
+        model.compile(loss='kld', optimizer='sgd')
         return model
 
 
-    def update_belief_state_multi(self, belief_input, scalar_input):
+    def get_belief_state(self, observation):
         with self.session.as_default():
             with self.graph.as_default():
-                batch = [[belief_input], [scalar_input]]
+                batch = np.asarray([np.asarray([observation])])
                 return self.belief_state.predict(batch)[0]
 
 
-    def train_belief_state(self, belief_input, scalar_input, _output):
-        _input = [belief_input, scalar_input]
-        return self.belief_state.fit(_input, _output, verbose=0, validation_split=0.1)
+    def train_belief_state(self, _input, _output):
+        max_len = max(x.shape[0] for x in _input)
+        _input = sequence.pad_sequences(_input, maxlen=max_len)
+        _output = sequence.pad_sequences(_output, maxlen=max_len)
+        return self.belief_state.fit(_input, _output, verbose=0, validation_split=0.05)
 
     # 8 x 8 board with 14 channels
     # (6 my pieces + 6 their pieces + empty squares) + 1 for sensing
@@ -160,10 +176,16 @@ class ChessModel:
     def load_all(self):
         self.move_policy = load_model('move_policy.h5')
         self.sense_policy = load_model('sense_policy.h5')
-        self.belief_state = load_model('belief_state_lr0005.h5')
+        self.belief_state = load_model('belief_state.h5')
+        # If we are not training, we want to be stateful
+        if not self.training:
+            stateful = self.build_belief_state_network(stateful=True)
+            stateful.set_weights(self.belief_state.get_weights())
+            self.belief_state = stateful
+
 
     def save_belief(self):
-        self.belief_state.save('belief_state_lr001.h5')
+        self.belief_state.save('belief_state.h5')
 
     def __build_train_fn(self, model):
         """Create a train function
