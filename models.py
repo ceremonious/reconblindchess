@@ -54,41 +54,38 @@ class ChessModel:
         #               input_shape=input_shape))
         # cnn.add(Flatten())
 
+        flatten = Sequential()
+        flatten.add(Flatten(input_shape=(8, 8, 13)))
         model = Sequential()
-        # if stateful:
-        #     model.add(TimeDistributed(cnn, input_shape=(None, 8, 8, 13),
-        #                               batch_input_shape=(1, 1, 8, 8, 13)))
-        # else:
-        #     model.add(TimeDistributed(cnn, input_shape=(None, 8, 8, 13)))
+
         if stateful:
-            model.add(ConvLSTM2D(64, (1, 1), return_sequences=True, stateful=stateful,
-                           input_shape=(None, 8, 8, 13), batch_input_shape=(1, 1, 8, 8, 13)))
+            model.add(TimeDistributed(flatten, input_shape=(None, 8, 8, 13),
+                                      batch_input_shape=(1, 1, 8, 8, 13)))
         else:
-            model.add(ConvLSTM2D(64, (1, 1), return_sequences=True, stateful=stateful,
-                           input_shape=(None, 8, 8, 13)))
-        # model.add(LSTM(384, return_sequences=True, stateful=stateful))
-        # model.add(LSTM(384, return_sequences=True, stateful=stateful))
-        # model.add(LSTM(384, return_sequences=True, stateful=stateful))
-        model.add(ConvLSTM2D(64, (1, 1), return_sequences=True, stateful=stateful))
-        model.add(ConvLSTM2D(64, (1, 1), return_sequences=True, stateful=stateful))
-        model.add(Dense(1000))
-        model.add(Dense(1000))
-        model.add(Dense(13))
-        model.add(Activation('softmax'))
-        model.add(TimeDistributed(Reshape((8, 8, 13)), input_shape=(None, 8, 8, 13)))
-        # for i in range(1):
-        #     model.add(Dense(1000))
+            model.add(TimeDistributed(flatten, input_shape=(None, 8, 8, 13)))
 
-        # model.add(Dense(64 * 13))
-        # print(model._keras_shape)
+        for i in range(2):
+            model.add(LSTM(64, return_sequences=True, stateful=stateful))
+        # model.add(LSTM(64, (1, 1), return_sequences=True, stateful=stateful))
+        # model.add(LSTM(64, (1, 1), return_sequences=True, stateful=stateful))
+        # model.add(LSTM(64, (1, 1), return_sequences=True, stateful=stateful))
+        # model.add(Dense(1000))
+        # model.add(Dense(1000))
+        # model.add(Activation('softmax'))
+        # model.add(TimeDistributed(Reshape((8, 8, 13)), input_shape=(None, 8, 8, 13)))
 
-        # # Reshaping for each timestep
-        # reshape = Sequential()
-        # reshape.add(Reshape((64, 13)))
-        # reshape.add(Activation('softmax'))
-        # reshape.add(Reshape((8, 8, 13)))
+        for i in range(8):
+            model.add(Dense(400))
 
-        # model.add(TimeDistributed(reshape, input_shape=(None, 64 * 13)))
+        model.add(Dense(64 * 13))
+
+        # Reshaping for each timestep
+        reshape = Sequential()
+        reshape.add(Reshape((64, 13)))
+        reshape.add(Activation('softmax'))
+        reshape.add(Reshape((8, 8, 13)))
+
+        model.add(TimeDistributed(reshape, input_shape=(None, 64 * 13)))
         model.compile(loss='kld', optimizer='sgd')
         return model
 

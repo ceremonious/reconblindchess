@@ -18,7 +18,7 @@ def self_play(should_play, queue):
     num_games = 0
     while True:
         print("playing")
-        moves = [["e2e4", "a2a4"], ["e7e5"]]
+        moves = [["e2e4", "a2a4", "h2h4"], ["e7e5"]]
         sensing = [[28], [24, 28]]
         while should_play.value:
             board = ReconBoard()
@@ -83,9 +83,9 @@ def train_model():
     queue = Queue()
     should_play = Value('i', 1)
 
-    num_processes = 4
-    train_iteration = 500
-    save_iteration = 1000
+    num_processes = 1
+    train_iteration = 32
+    save_iteration = 5000
     board = ReconBoard()
     model = ChessModel(False)
 
