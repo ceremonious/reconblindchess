@@ -19,7 +19,8 @@ class ReconBoard(Board):
         self.visible_state = [BaseBoard(), BaseBoard()]
         self.belief_state = [self.get_current_state(False),
                              self.get_current_state(True)]
-        self.observation = [np.zeros((8, 8, 13), dtype='float32')] * 2
+        self.observation = [np.zeros((8, 8, 13), dtype='float32'),
+                            np.zeros((8, 8, 13), dtype='float32')]
         self.sense_history = [[], []]
 
     def remove_opp_pieces(self, color):

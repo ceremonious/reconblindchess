@@ -55,7 +55,7 @@ def simple_test():
     model.get_belief_state(observation)
 
     board.sense(3)
-    board.push(Move.from_uci("a2a4"))
+    board.push(Move.from_uci("e2e4"))
 
     observation = board.my_pieces_observation(board.turn)
     pre_sense = np.round(model.get_belief_state(observation), 3)
@@ -75,7 +75,7 @@ def seq_test():
     observations.append(board.get_current_state(True))
 
     board.sense(3)
-    board.push(Move.from_uci("e2e4"))
+    board.push(Move.from_uci("a2a4"))
 
     observations.append(board.my_pieces_observation(board.turn))
     observations.append(board.sense(28))
@@ -135,7 +135,8 @@ def play():
         board.push(move)
 
 if __name__ == '__main__':
-    simple_test()
+    seq_test()
+    # model = ChessModel(load_from_file=True, training=False)
     #test_belief_state()
     # model = ChessModel(True)
     # print(board.get_current_state(False))

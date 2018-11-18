@@ -10,7 +10,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import set_random_seed
 from keras.utils import plot_model
-set_random_seed(2)
+set_random_seed(12321)
 
 K.clear_session()
 
@@ -41,7 +41,7 @@ class ChessModel:
 
 
     # 8x8 observation with 13 channels
-    def build_belief_state_network(self, stateful=False):
+    def build_belief_state_network(self, training=True):
         input_shape = (8, 8, 13)
 
         # Convolutional part for each timestep
@@ -55,40 +55,34 @@ class ChessModel:
         # cnn.add(Flatten())
 
         flatten = Sequential()
+        # flatten.add(Conv2D(13, (1, 1), input_shape=(8, 8, 13)))
+        # flatten.add(Flatten())
         flatten.add(Flatten(input_shape=(8, 8, 13)))
-        model = Sequential()
 
-        if stateful:
-            model.add(TimeDistributed(flatten, input_shape=(None, 8, 8, 13),
-                                      batch_input_shape=(1, 1, 8, 8, 13)))
+        lstm = Sequential()
+        if not training:
+            lstm.add(TimeDistributed(flatten, input_shape=(None, 8, 8, 13),
+                                     batch_input_shape=(1, 1, 8, 8, 13)))
         else:
-            model.add(TimeDistributed(flatten, input_shape=(None, 8, 8, 13)))
+            lstm.add(TimeDistributed(flatten, input_shape=(None, 8, 8, 13)))
 
-        for i in range(2):
-            model.add(LSTM(64, return_sequences=True, stateful=stateful))
-        # model.add(LSTM(64, (1, 1), return_sequences=True, stateful=stateful))
-        # model.add(LSTM(64, (1, 1), return_sequences=True, stateful=stateful))
-        # model.add(LSTM(64, (1, 1), return_sequences=True, stateful=stateful))
-        # model.add(Dense(1000))
-        # model.add(Dense(1000))
-        # model.add(Activation('softmax'))
-        # model.add(TimeDistributed(Reshape((8, 8, 13)), input_shape=(None, 8, 8, 13)))
+        for i in range(4):
+            stateful = not training
+            lstm.add(LSTM(200, return_sequences=True, stateful=stateful))
 
-        for i in range(8):
-            model.add(Dense(400))
-
+        model = Sequential()
+        for i in range(4):
+            model.add(Dense(1000))
         model.add(Dense(64 * 13))
+        model.add(Reshape((64, 13)))
+        model.add(Activation('softmax'))
+        model.add(Reshape((8, 8, 13)))
 
-        # Reshaping for each timestep
-        reshape = Sequential()
-        reshape.add(Reshape((64, 13)))
-        reshape.add(Activation('softmax'))
-        reshape.add(Reshape((8, 8, 13)))
+        lstm.add(TimeDistributed(model, input_shape=(None, 8 * 8 * 13)))
 
-        model.add(TimeDistributed(reshape, input_shape=(None, 64 * 13)))
-        model.compile(loss='kld', optimizer='sgd')
-        return model
-
+        sgd = optimizers.SGD(lr=0.01)
+        lstm.compile(loss='kld', optimizer=sgd)
+        return lstm
 
     def get_belief_state(self, observation):
         with self.session.as_default():
@@ -101,7 +95,8 @@ class ChessModel:
         max_len = max(x.shape[0] for x in _input)
         _input = sequence.pad_sequences(_input, maxlen=max_len)
         _output = sequence.pad_sequences(_output, maxlen=max_len)
-        return self.belief_state.fit(_input, _output, verbose=0, validation_split=0.05)
+        return self.belief_state.fit(_input, _output, batch_size=32,
+                                     verbose=0, validation_split=0.05)
 
     # 8 x 8 board with 14 channels
     # (6 my pieces + 6 their pieces + empty squares) + 1 for sensing
@@ -176,7 +171,7 @@ class ChessModel:
         self.belief_state = load_model('belief_state.h5')
         # If we are not training, we want to be stateful
         if not self.training:
-            stateful = self.build_belief_state_network(stateful=True)
+            stateful = self.build_belief_state_network(training=False)
             stateful.set_weights(self.belief_state.get_weights())
             self.belief_state = stateful
 

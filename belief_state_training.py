@@ -83,8 +83,8 @@ def train_model():
     queue = Queue()
     should_play = Value('i', 1)
 
-    num_processes = 1
-    train_iteration = 32
+    num_processes = 4
+    train_iteration = 100
     save_iteration = 5000
     board = ReconBoard()
     model = ChessModel(False)
@@ -117,8 +117,9 @@ def train_model():
             should_play.value = 0
             while not queue.empty():
                 next_set = queue.get()
-                observations.append(next_set[0][i])
-                true_states.append(next_set[1][i])
+                for i in range(2):
+                    observations.append(next_set[0][i])
+                    true_states.append(next_set[1][i])
                 num_trained += 1
 
             _input = np.asarray(observations)
