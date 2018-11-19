@@ -50,20 +50,35 @@ def test_belief_state(load_from_file=True):
 def simple_test():
     model = ChessModel(True, training=False)
     board = ReconBoard()
-    # observation = board.my_pieces_observation(board.turn)
-    observation = board.get_current_state(True)
-    model.get_belief_state(observation)
 
-    board.sense(3)
-    board.push(Move.from_uci("e2e4"))
+    # Start of game
+    observation = board.get_current_state(board.turn)
+    print(np.round(model.get_belief_state(observation), 2))
 
-    observation = board.my_pieces_observation(board.turn)
-    pre_sense = np.round(model.get_belief_state(observation), 3)
-    print(pre_sense)
+    board.push(Move.from_uci("a2a4"))
+
+    # Turn 1
+    observation = board.get_pre_turn_observation()
+    print(np.round(model.get_belief_state(observation), 2))
     observation = board.sense(28)
+    print(np.round(model.get_belief_state(observation), 2))
 
-    post_sense = np.round(model.get_belief_state(observation), 2)
-    print(post_sense)
+    # board.push(Move.from_uci("e7e5"))
+    # board.push(Move.from_uci("d2d4"))
+
+    # # Turn 2
+    # observation = board.get_pre_turn_observation()
+    # print(np.round(model.get_belief_state(observation), 2))
+    # observation = board.sense(28)
+    # print(np.round(model.get_belief_state(observation), 2))
+
+    # observation = board.my_pieces_observation(board.turn)
+    # pre_sense = np.round(model.get_belief_state(observation), 2)
+    # print(pre_sense)
+    # observation = board.sense(28)
+
+    # post_sense = np.round(model.get_belief_state(observation), 2)
+    # print(post_sense)
 
 
 def seq_test():
@@ -71,17 +86,14 @@ def seq_test():
     board = ReconBoard()
 
     observations = []
-    # observation = board.my_pieces_observation(board.turn)
-    observations.append(board.get_current_state(True))
+    observations.append(board.get_current_state(board.turn))
 
-    board.sense(3)
     board.push(Move.from_uci("a2a4"))
-
-    observations.append(board.my_pieces_observation(board.turn))
+    observations.append(board.get_pre_turn_observation())
     observations.append(board.sense(28))
 
     batch = np.asarray([np.asarray(observations)])
-    print(model.belief_state.predict(batch)[0][-1])
+    print(np.round(model.belief_state.predict(batch)[0][-1]), 2)
 
 
 def play():
@@ -135,7 +147,7 @@ def play():
         board.push(move)
 
 if __name__ == '__main__':
-    seq_test()
+    simple_test()
     # model = ChessModel(load_from_file=True, training=False)
     #test_belief_state()
     # model = ChessModel(True)

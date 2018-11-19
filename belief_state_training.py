@@ -18,9 +18,13 @@ def self_play(should_play, queue):
     num_games = 0
     while True:
         print("playing")
-        moves = [["e2e4", "a2a4", "h2h4"], ["e7e5"]]
-        sensing = [[28], [24, 28]]
         while should_play.value:
+            if num_games % 2 == 0:
+                moves = [["e2e4"], ["e7e5"]]
+            else:
+                moves = [["a2a4"], ["e7e5"]]
+            sensing = [[28], [28]]
+
             board = ReconBoard()
 
             ply_num = 0
@@ -38,8 +42,7 @@ def self_play(should_play, queue):
                 # Update our belief state based on the results of the last two ply
                 # Any observations we made about empty squares / captures
                 # And where our pieces are now
-                observation = np.add(board.observation[board.turn],
-                                     board.my_pieces_observation(board.turn))
+                observation = board.get_pre_turn_observation()
                 belief_input_training[board.turn].append(observation)
                 belief_output_training[board.turn].append(true_state)
                 # board_states.append(board.board_fen())
@@ -60,13 +63,14 @@ def self_play(should_play, queue):
 
                 legal_moves = board.get_pseudo_legal_moves()
                 # move = np.random.choice(legal_moves)
-                move = Move.from_uci(random.choice(moves[ply_num]))
+                move = random.choice(moves[ply_num])
+                print(move)
+                move = Move.from_uci(move)
 
                 # print("{} making move {}".format(color_name, str(move)))
 
                 board.push(move)
                 ply_num += 1
-
 
             for i in range(2):
                 belief_input_training[i] = np.asarray(belief_input_training[i])
@@ -74,6 +78,9 @@ def self_play(should_play, queue):
 
             if should_play.value:
                 queue.put((belief_input_training, belief_output_training))
+
+            num_games += 1
+
         # Wait here while the main thread is training the model
         while not should_play.value:
             pass
@@ -83,9 +90,9 @@ def train_model():
     queue = Queue()
     should_play = Value('i', 1)
 
-    num_processes = 4
-    train_iteration = 100
-    save_iteration = 5000
+    num_processes = 1
+    train_iteration = 2
+    save_iteration = 2
     board = ReconBoard()
     model = ChessModel(False)
 
@@ -105,19 +112,19 @@ def train_model():
 
     while True:
         next_set = queue.get()
-        for i in range(2):
+        for i in range(1):
             observations.append(next_set[0][i])
             true_states.append(next_set[1][i])
 
         num_trained += 1
-        if num_trained % 25 == 0:
+        if num_trained % 20 == 0:
             print(num_trained)
 
         if num_trained % train_iteration == 0:
             should_play.value = 0
             while not queue.empty():
                 next_set = queue.get()
-                for i in range(2):
+                for i in range(1):
                     observations.append(next_set[0][i])
                     true_states.append(next_set[1][i])
                 num_trained += 1
@@ -126,8 +133,8 @@ def train_model():
             _output = np.asarray(true_states)
 
             result = model.train_belief_state(_input, _output)
-            loss_over_time.append(result.history['val_loss'][0])
-            print(result.history['val_loss'][0])
+            loss_over_time.append(result.history['loss'][0])
+            print(result.history['loss'][0])
 
             if num_trained % save_iteration == 0:
                 print("Saving")

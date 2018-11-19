@@ -55,9 +55,9 @@ class ChessModel:
         # cnn.add(Flatten())
 
         flatten = Sequential()
-        # flatten.add(Conv2D(13, (1, 1), input_shape=(8, 8, 13)))
-        # flatten.add(Flatten())
-        flatten.add(Flatten(input_shape=(8, 8, 13)))
+        flatten.add(Conv2D(52, (3, 3), input_shape=(8, 8, 13)))
+        flatten.add(Flatten())
+        # flatten.add(Flatten(input_shape=(8, 8, 13)))
 
         lstm = Sequential()
         if not training:
@@ -66,12 +66,12 @@ class ChessModel:
         else:
             lstm.add(TimeDistributed(flatten, input_shape=(None, 8, 8, 13)))
 
-        for i in range(4):
+        for i in range(2):
             stateful = not training
             lstm.add(LSTM(200, return_sequences=True, stateful=stateful))
 
         model = Sequential()
-        for i in range(4):
+        for i in range(1):
             model.add(Dense(1000))
         model.add(Dense(64 * 13))
         model.add(Reshape((64, 13)))
@@ -95,8 +95,8 @@ class ChessModel:
         max_len = max(x.shape[0] for x in _input)
         _input = sequence.pad_sequences(_input, maxlen=max_len)
         _output = sequence.pad_sequences(_output, maxlen=max_len)
-        return self.belief_state.fit(_input, _output, batch_size=32,
-                                     verbose=0, validation_split=0.05)
+        return self.belief_state.fit(_input, _output, batch_size=32, epochs=1000,
+                                     verbose=1, validation_split=0)
 
     # 8 x 8 board with 14 channels
     # (6 my pieces + 6 their pieces + empty squares) + 1 for sensing
@@ -168,7 +168,7 @@ class ChessModel:
     def load_all(self):
         self.move_policy = load_model('move_policy.h5')
         self.sense_policy = load_model('sense_policy.h5')
-        self.belief_state = load_model('belief_state.h5')
+        self.belief_state = load_model('belief_state_predicts_pawn_pos.h5')
         # If we are not training, we want to be stateful
         if not self.training:
             stateful = self.build_belief_state_network(training=False)

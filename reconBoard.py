@@ -339,9 +339,11 @@ class ReconBoard(Board):
         # Returns numpy version of board with only pieces in
         return self.get_current_state(self.turn, mask)
 
+    def get_pre_turn_observation(self):
+        return np.add(self.observation[self.turn], self.my_pieces_observation(self.turn))
+
     def my_pieces_observation(self, color):
         return self.get_current_state(color, mask=self.occupied_co[color])
-
 
     def get_current_state(self, color, mask=BB_ALL):
         ranks = range(8) if color else range(7, -1, -1)
