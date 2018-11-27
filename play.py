@@ -55,7 +55,7 @@ def simple_test():
     observation = board.get_current_state(board.turn)
     print(np.round(model.get_belief_state(observation), 2))
 
-    board.push(Move.from_uci("a2a4"))
+    board.push(Move.from_uci("e2e4"))
 
     # Turn 1
     observation = board.get_pre_turn_observation()

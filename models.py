@@ -80,7 +80,7 @@ class ChessModel:
 
         lstm.add(TimeDistributed(model, input_shape=(None, 8 * 8 * 13)))
 
-        sgd = optimizers.SGD(lr=0.01)
+        sgd = optimizers.SGD(lr=0.1, momentum=0.1)
         lstm.compile(loss='kld', optimizer=sgd)
         return lstm
 
@@ -91,12 +91,12 @@ class ChessModel:
                 return self.belief_state.predict(batch)[0]
 
 
-    def train_belief_state(self, _input, _output):
+    def train_belief_state(self, _input, _output, epochs=1):
         max_len = max(x.shape[0] for x in _input)
         _input = sequence.pad_sequences(_input, maxlen=max_len)
         _output = sequence.pad_sequences(_output, maxlen=max_len)
-        return self.belief_state.fit(_input, _output, batch_size=32, epochs=1000,
-                                     verbose=1, validation_split=0)
+        return self.belief_state.fit(_input, _output, batch_size=32, epochs=epochs,
+                                     verbose=0, validation_split=0)
 
     # 8 x 8 board with 14 channels
     # (6 my pieces + 6 their pieces + empty squares) + 1 for sensing
@@ -168,7 +168,7 @@ class ChessModel:
     def load_all(self):
         self.move_policy = load_model('move_policy.h5')
         self.sense_policy = load_model('sense_policy.h5')
-        self.belief_state = load_model('belief_state_predicts_pawn_pos.h5')
+        self.belief_state = load_model('belief_state_1.h5')
         # If we are not training, we want to be stateful
         if not self.training:
             stateful = self.build_belief_state_network(training=False)

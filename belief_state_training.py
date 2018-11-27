@@ -19,10 +19,7 @@ def self_play(should_play, queue):
     while True:
         print("playing")
         while should_play.value:
-            if num_games % 2 == 0:
-                moves = [["e2e4"], ["e7e5"]]
-            else:
-                moves = [["a2a4"], ["e7e5"]]
+            moves = [["e2e4", "a2a4", "h2h4", "b2b4", "f2f4"], ["e7e5"]]
             sensing = [[28], [28]]
 
             board = ReconBoard()
@@ -64,7 +61,6 @@ def self_play(should_play, queue):
                 legal_moves = board.get_pseudo_legal_moves()
                 # move = np.random.choice(legal_moves)
                 move = random.choice(moves[ply_num])
-                print(move)
                 move = Move.from_uci(move)
 
                 # print("{} making move {}".format(color_name, str(move)))
@@ -90,9 +86,9 @@ def train_model():
     queue = Queue()
     should_play = Value('i', 1)
 
-    num_processes = 1
-    train_iteration = 2
-    save_iteration = 2
+    num_processes = 4
+    train_iteration = 1000
+    save_iteration = 5000
     board = ReconBoard()
     model = ChessModel(False)
 
@@ -110,6 +106,7 @@ def train_model():
     true_states = []
     loss_over_time = []
 
+    print("Start: " + str(time.time()))
     while True:
         next_set = queue.get()
         for i in range(1):
@@ -132,9 +129,10 @@ def train_model():
             _input = np.asarray(observations)
             _output = np.asarray(true_states)
 
-            result = model.train_belief_state(_input, _output)
+            result = model.train_belief_state(_input, _output, 100)
             loss_over_time.append(result.history['loss'][0])
             print(result.history['loss'][0])
+            print("Time: " + str(time.time()))
 
             if num_trained % save_iteration == 0:
                 print("Saving")
