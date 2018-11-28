@@ -10,12 +10,12 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import set_random_seed
 from keras.utils import plot_model
-set_random_seed(12321)
 
 K.clear_session()
 
 class ChessModel:
-    def __init__(self, load_from_file=False, training=True):
+    def __init__(self, hp, load_from_file=False, training=True):
+        self.hp = hp
         self.training = training
 
         if load_from_file:
@@ -39,7 +39,6 @@ class ChessModel:
         plot_model(self.belief_state, to_file='model.png')
         # print(self.belief_state.summary())
 
-
     # 8x8 observation with 13 channels
     def build_belief_state_network(self, training=True):
         input_shape = (8, 8, 13)
@@ -55,7 +54,10 @@ class ChessModel:
         # cnn.add(Flatten())
 
         flatten = Sequential()
-        flatten.add(Conv2D(52, (3, 3), input_shape=(8, 8, 13)))
+        for i in range(self.hp["num_conv"]):
+            flatten.add(Conv2D(self.hp["conv_filters"],
+                               (self.hp["conv_kernel"], self.hp["conv_kernel"]),
+                               input_shape=(8, 8, 13)))
         flatten.add(Flatten())
         # flatten.add(Flatten(input_shape=(8, 8, 13)))
 
@@ -66,13 +68,13 @@ class ChessModel:
         else:
             lstm.add(TimeDistributed(flatten, input_shape=(None, 8, 8, 13)))
 
-        for i in range(2):
+        for i in range(self.hp["num_lstm"]):
             stateful = not training
-            lstm.add(LSTM(200, return_sequences=True, stateful=stateful))
+            lstm.add(LSTM(self.hp["lstm_size"], return_sequences=True, stateful=stateful))
 
         model = Sequential()
-        for i in range(1):
-            model.add(Dense(1000))
+        for i in range(self.hp["num_dense"]):
+            model.add(Dense(self.hp["dense_size"]))
         model.add(Dense(64 * 13))
         model.add(Reshape((64, 13)))
         model.add(Activation('softmax'))
@@ -80,7 +82,7 @@ class ChessModel:
 
         lstm.add(TimeDistributed(model, input_shape=(None, 8 * 8 * 13)))
 
-        sgd = optimizers.SGD(lr=0.1, momentum=0.1)
+        sgd = optimizers.SGD(lr=self.hp["lr"], momentum=self.hp["momentum"])
         lstm.compile(loss='kld', optimizer=sgd)
         return lstm
 
@@ -95,8 +97,8 @@ class ChessModel:
         max_len = max(x.shape[0] for x in _input)
         _input = sequence.pad_sequences(_input, maxlen=max_len)
         _output = sequence.pad_sequences(_output, maxlen=max_len)
-        return self.belief_state.fit(_input, _output, batch_size=32, epochs=epochs,
-                                     verbose=0, validation_split=0)
+        return self.belief_state.fit(_input, _output, batch_size=self.hp["batch_size"],
+                                     epochs=epochs, verbose=0, validation_split=0)
 
     # 8 x 8 board with 14 channels
     # (6 my pieces + 6 their pieces + empty squares) + 1 for sensing
@@ -168,7 +170,7 @@ class ChessModel:
     def load_all(self):
         self.move_policy = load_model('move_policy.h5')
         self.sense_policy = load_model('sense_policy.h5')
-        self.belief_state = load_model('belief_state_1.h5')
+        self.belief_state = load_model('belief_state.h5')
         # If we are not training, we want to be stateful
         if not self.training:
             stateful = self.build_belief_state_network(training=False)

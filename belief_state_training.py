@@ -19,7 +19,10 @@ def self_play(should_play, queue):
     while True:
         print("playing")
         while should_play.value:
-            moves = [["e2e4", "a2a4", "h2h4", "b2b4", "f2f4"], ["e7e5"]]
+            if num_games == 0:
+                moves = [["a2a4"], ["e7e5"]]
+            elif num_games == 1:
+                moves = [["e2e4"], ["e7e5"]]
             sensing = [[28], [28]]
 
             board = ReconBoard()
@@ -187,6 +190,75 @@ def evaluate_model(load_from_file):
     _eval = K.eval(kullback_leibler_divergence(K.variable(_output), K.variable(baseline)))
     print(np.average(_eval, None))
 
+
+def hyper_opt():
+    hp_space = {
+        "num_conv": (1, 2, 3),
+        "conv_filters": (10, 30, 50, 70, 90),
+        "conv_kernel": (1, 2, 3),
+        "num_lstm": (1, 2, 4, 6),
+        "lstm_size": (100, 150, 200, 250, 300),
+        "num_dense": (1, 2, 4, 8, 10),
+        "dense_size": (500, 1000, 1500),
+        "lr": (0.01, 0.1, 0.001),
+        "momentum": (0, 0.1, 0.2, 0.3),
+        "batch_size": (32, 64, 128)
+    }
+    queue = Queue()
+    should_play = Value('i', 1)
+
+    num_processes = 1
+
+    for i in range(num_processes):
+        thread = threading.Thread(name=str(i),
+                                  target=self_play,
+                                  args=(should_play, queue))
+        thread.setDaemon(True)
+        thread.start()
+
+    num_trained = 0
+
+    # These are lists of lists. Each internal list is a game
+    observations = []
+    true_states = []
+
+    while True:
+        next_set = queue.get()
+        for i in range(1):
+            observations.append(next_set[0][i])
+            true_states.append(next_set[1][i])
+
+        num_trained += 1
+
+        if num_trained == 2:
+            _input = np.asarray(observations)
+            _output = np.asarray(true_states)
+            choices = [0] * len(hp_space.items())
+            num_hp = 0
+            for key, val in hp_space.items():
+                losses = []
+                for i in range(len(val)):
+                    choices[num_hp] = i
+                    hp = generate_hp(hp_space, choices)
+                    model = ChessModel(hp)
+                    result = model.train_belief_state(_input, _output, 5)
+                    losses.append(result.history["loss"][-1])
+
+                min_loss = min(losses)
+                choices[num_hp] = losses.index(min_loss)
+                print(losses)
+                print(generate_hp(hp_space, choices))
+                num_hp += 1
+
+
+def generate_hp(hp_space, choices):
+    hp = {}
+    i = 0
+    for key, val in hp_space.items():
+        hp[key] = val[choices[i]]
+        i += 1
+    return hp
+
 if __name__ == '__main__':
-    train_model()
+    hyper_opt()
     # evaluate_model(True)
