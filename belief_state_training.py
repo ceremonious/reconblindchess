@@ -19,11 +19,8 @@ def self_play(should_play, queue):
     while True:
         print("playing")
         while should_play.value:
-            if num_games == 0:
-                moves = [["a2a4"], ["e7e5"]]
-            elif num_games == 1:
-                moves = [["e2e4"], ["e7e5"]]
-            sensing = [[28], [28]]
+            moves = [["a2a4", "e2e4", "h2h4"], ["e7e5"]]
+            sensing = [[28], [24, 28, 31]]
 
             board = ReconBoard()
 
@@ -48,8 +45,8 @@ def self_play(should_play, queue):
                 # board_states.append(board.board_fen())
 
                 # Choose where to sense based on policy or exploration
-                # square = np.random.randint(64)
-                square = random.choice(sensing[ply_num])
+                square = np.random.randint(64)
+                # square = random.choice(sensing[ply_num])
 
                 # print("{} observing at square {}".format(color_name, SQUARE_NAMES[square]))
 
@@ -62,9 +59,9 @@ def self_play(should_play, queue):
                 # board_states.append(board.board_fen())
 
                 legal_moves = board.get_pseudo_legal_moves()
-                # move = np.random.choice(legal_moves)
-                move = random.choice(moves[ply_num])
-                move = Move.from_uci(move)
+                move = np.random.choice(legal_moves)
+                # move = random.choice(moves[ply_num])
+                # move = Move.from_uci(move)
 
                 # print("{} making move {}".format(color_name, str(move)))
 
@@ -86,14 +83,16 @@ def self_play(should_play, queue):
 
 
 def train_model():
+    hp = {'num_conv': 3, 'conv_filters': 70, 'conv_kernel': 3, 'num_lstm': 1, 'lstm_size': 250,
+          'num_dense': 8, 'dense_size': 1500, 'lr': 0.1, 'momentum': 0.3, 'batch_size': 128}
     queue = Queue()
     should_play = Value('i', 1)
 
     num_processes = 4
     train_iteration = 1000
-    save_iteration = 5000
+    save_iteration = 2000
     board = ReconBoard()
-    model = ChessModel(False)
+    model = ChessModel(hp, False)
 
     for i in range(num_processes):
         thread = threading.Thread(name=str(i),
@@ -132,9 +131,9 @@ def train_model():
             _input = np.asarray(observations)
             _output = np.asarray(true_states)
 
-            result = model.train_belief_state(_input, _output, 100)
-            loss_over_time.append(result.history['loss'][0])
-            print(result.history['loss'][0])
+            result = model.train_belief_state(_input, _output, 500)
+            loss_over_time.append(result.history['loss'][-1])
+            print(result.history['loss'][-1])
             print("Time: " + str(time.time()))
 
             if num_trained % save_iteration == 0:
@@ -241,7 +240,7 @@ def hyper_opt():
                     choices[num_hp] = i
                     hp = generate_hp(hp_space, choices)
                     model = ChessModel(hp)
-                    result = model.train_belief_state(_input, _output, 5)
+                    result = model.train_belief_state(_input, _output, 5000)
                     losses.append(result.history["loss"][-1])
 
                 min_loss = min(losses)
@@ -260,5 +259,6 @@ def generate_hp(hp_space, choices):
     return hp
 
 if __name__ == '__main__':
-    hyper_opt()
+    train_model()
+    # hyper_opt()
     # evaluate_model(True)

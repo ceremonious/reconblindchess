@@ -48,19 +48,21 @@ def test_belief_state(load_from_file=True):
 
 
 def simple_test():
-    model = ChessModel(True, training=False)
+    hp = {'num_conv': 3, 'conv_filters': 70, 'conv_kernel': 3, 'num_lstm': 1, 'lstm_size': 250,
+          'num_dense': 8, 'dense_size': 1500, 'lr': 0.1, 'momentum': 0.3, 'batch_size': 128}
+    model = ChessModel(hp, True, training=False)
     board = ReconBoard()
 
     # Start of game
     observation = board.get_current_state(board.turn)
     print(np.round(model.get_belief_state(observation), 2))
 
-    board.push(Move.from_uci("e2e4"))
+    board.push(Move.from_uci("a2a4"))
 
     # Turn 1
     observation = board.get_pre_turn_observation()
     print(np.round(model.get_belief_state(observation), 2))
-    observation = board.sense(28)
+    observation = board.sense(24)
     print(np.round(model.get_belief_state(observation), 2))
 
     # board.push(Move.from_uci("e7e5"))
