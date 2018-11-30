@@ -14,13 +14,13 @@ import random
 np.set_printoptions(threshold=np.nan, linewidth=2000, suppress=True)
 
 
-def self_play(should_play, queue):
+def self_play(should_play, queue, move_queue):
     num_games = 0
     while True:
         print("playing")
         while should_play.value:
-            moves = [["a2a4", "e2e4", "h2h4"], ["e7e5"]]
-            sensing = [[28], [24, 28, 31]]
+            moves = [["e2e4", "a2a4", "h2h4"], ["e7e5"]]
+            sensing = [[28], [28, 24, 31]]
 
             board = ReconBoard()
 
@@ -45,8 +45,8 @@ def self_play(should_play, queue):
                 # board_states.append(board.board_fen())
 
                 # Choose where to sense based on policy or exploration
-                square = np.random.randint(64)
-                # square = random.choice(sensing[ply_num])
+                # square = np.random.randint(64)
+                square = random.choice(sensing[ply_num])
 
                 # print("{} observing at square {}".format(color_name, SQUARE_NAMES[square]))
 
@@ -59,9 +59,9 @@ def self_play(should_play, queue):
                 # board_states.append(board.board_fen())
 
                 legal_moves = board.get_pseudo_legal_moves()
-                move = np.random.choice(legal_moves)
-                # move = random.choice(moves[ply_num])
-                # move = Move.from_uci(move)
+                # move = np.random.choice(legal_moves)
+                move = random.choice(moves[ply_num])
+                move = Move.from_uci(move)
 
                 # print("{} making move {}".format(color_name, str(move)))
 
@@ -81,23 +81,29 @@ def self_play(should_play, queue):
         while not should_play.value:
             pass
 
+        new_move = move_queue.get()
+        if new_move:
+            moves[0].append(new_move[0])
+            sensing[1].append(new_move[1])
+
 
 def train_model():
     hp = {'num_conv': 3, 'conv_filters': 70, 'conv_kernel': 3, 'num_lstm': 1, 'lstm_size': 250,
           'num_dense': 8, 'dense_size': 1500, 'lr': 0.1, 'momentum': 0.3, 'batch_size': 128}
     queue = Queue()
+    move_queue = Queue()
     should_play = Value('i', 1)
 
-    num_processes = 4
-    train_iteration = 1000
-    save_iteration = 2000
+    num_processes = 1
+    train_iteration = 20
+    save_iteration = 20
     board = ReconBoard()
-    model = ChessModel(hp, False)
+    model = ChessModel(hp, True)
 
     for i in range(num_processes):
         thread = threading.Thread(name=str(i),
                                   target=self_play,
-                                  args=(should_play, queue))
+                                  args=(should_play, queue, move_queue))
         thread.setDaemon(True)
         thread.start()
 
@@ -107,6 +113,12 @@ def train_model():
     observations = []
     true_states = []
     loss_over_time = []
+
+    # Moves to add
+    moves_to_add = [("b2b4", 25), ("c2c4", 26), ("d2d4", 27), ("f2f4", 29),
+                    ("g2g4", 30), ("g1f3", 21), ("b1a3", 16)]
+    move_index = 0
+    num_epochs = 2
 
     print("Start: " + str(time.time()))
     while True:
@@ -131,18 +143,21 @@ def train_model():
             _input = np.asarray(observations)
             _output = np.asarray(true_states)
 
-            result = model.train_belief_state(_input, _output, 500)
-            loss_over_time.append(result.history['loss'][-1])
-            print(result.history['loss'][-1])
-            print("Time: " + str(time.time()))
+            loss = 10
+            while loss > 0.03:
+                result = model.train_belief_state(_input, _output, num_epochs)
+                loss = result.history['loss'][-1]
+                print(loss)
 
-            if num_trained % save_iteration == 0:
-                print("Saving")
-                print(loss_over_time)
-                model.save_belief()
-                print("Saved")
+            print("Time: " + str(time.time()))
+            print("Saving")
+            model.save_belief()
+            print("Saved")
 
             observations, true_states = [], []
+            move_queue.put(moves_to_add[move_index])
+            move_index += 1
+            num_epochs = int(num_epochs * 1.5)
             should_play.value = 1
 
 

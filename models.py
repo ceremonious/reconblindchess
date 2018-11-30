@@ -170,7 +170,7 @@ class ChessModel:
     def load_all(self):
         self.move_policy = load_model('move_policy.h5')
         self.sense_policy = load_model('sense_policy.h5')
-        self.belief_state = load_model('belief_state.h5')
+        self.belief_state = load_model('belief_state_ep.h5')
         # If we are not training, we want to be stateful
         if not self.training:
             stateful = self.build_belief_state_network(training=False)
@@ -179,7 +179,7 @@ class ChessModel:
 
 
     def save_belief(self):
-        self.belief_state.save('belief_state.h5')
+        self.belief_state.save('belief_state_ep.h5')
 
     def __build_train_fn(self, model):
         """Create a train function
