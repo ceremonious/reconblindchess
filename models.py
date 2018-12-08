@@ -14,8 +14,8 @@ from keras.utils import plot_model
 K.clear_session()
 
 class ChessModel:
-    def __init__(self, hp, load_from_file=False, training=True):
-        self.hp = hp
+    def __init__(self, hyperparamters, load_from_file=False, training=True):
+        self.hp = hyperparamters
         self.training = training
 
         if load_from_file:
@@ -25,10 +25,6 @@ class ChessModel:
             self.sense_policy = self.build_sensing_policy_network()
             self.move_policy = self.build_move_policy_network()
 
-        # Build custom loss function
-        self._train_sensing = self.__build_train_fn(self.sense_policy)
-        self._train_move = self.__build_train_fn(self.move_policy)
-
         # Needed for multi threading
         self.belief_state._make_predict_function()
         self.sense_policy._make_predict_function()
@@ -36,38 +32,25 @@ class ChessModel:
         self.session = K.get_session()
         self.graph = tf.get_default_graph()
 
-        plot_model(self.belief_state, to_file='model.png')
-        # print(self.belief_state.summary())
 
-    # 8x8 observation with 13 channels
     def build_belief_state_network(self, training=True):
-        input_shape = (8, 8, 13)
-
-        # Convolutional part for each timestep
-        # cnn = Sequential()
-        # cnn.add(Conv2D(384, (2,2),
-        #               activation='relu',
-        #               data_format="channels_last",
-        #               padding='same',
-        #               kernel_regularizer=regularizers.l2(0.01),
-        #               input_shape=input_shape))
-        # cnn.add(Flatten())
-
         flatten = Sequential()
         for i in range(self.hp["num_conv"]):
             flatten.add(Conv2D(self.hp["conv_filters"],
                                (self.hp["conv_kernel"], self.hp["conv_kernel"]),
                                input_shape=(8, 8, 13)))
         flatten.add(Flatten())
-        # flatten.add(Flatten(input_shape=(8, 8, 13)))
 
         lstm = Sequential()
         if not training:
+            # batch_input_shape required to be stateful
             lstm.add(TimeDistributed(flatten, input_shape=(None, 8, 8, 13),
                                      batch_input_shape=(1, 1, 8, 8, 13)))
         else:
             lstm.add(TimeDistributed(flatten, input_shape=(None, 8, 8, 13)))
 
+        # An lstm is stateful if it can take in entries one by one instead of being given
+        # the entire sequence up front.
         for i in range(self.hp["num_lstm"]):
             stateful = not training
             lstm.add(LSTM(self.hp["lstm_size"], return_sequences=True, stateful=stateful))
@@ -86,13 +69,14 @@ class ChessModel:
         lstm.compile(loss='kld', optimizer=sgd)
         return lstm
 
+    # Makes a prediction of the next board state given an observation
     def get_belief_state(self, observation):
         with self.session.as_default():
             with self.graph.as_default():
                 batch = np.asarray([np.asarray([observation])])
                 return self.belief_state.predict(batch)[0]
 
-
+    # Trains the model on inputs of board state + observation to next boardstate
     def train_belief_state(self, _input, _output, epochs=1):
         max_len = max(x.shape[0] for x in _input)
         _input = sequence.pad_sequences(_input, maxlen=max_len)
@@ -170,49 +154,16 @@ class ChessModel:
     def load_all(self):
         self.move_policy = load_model('move_policy.h5')
         self.sense_policy = load_model('sense_policy.h5')
-        self.belief_state = load_model('belief_state_ep.h5')
+        self.belief_state = load_model('belief_state.h5')
         # If we are not training, we want to be stateful
+        # Make a stateful model and transfer the weights
         if not self.training:
             stateful = self.build_belief_state_network(training=False)
             stateful.set_weights(self.belief_state.get_weights())
             self.belief_state = stateful
 
-
     def save_belief(self):
-        self.belief_state.save('belief_state_ep.h5')
-
-    def __build_train_fn(self, model):
-        """Create a train function
-        It replaces `model.fit(X, y)` because we use the output of model and use it for training.
-        For example, we need action placeholder
-        called `action_one_hot` that stores, which action we took at state `s`.
-        Hence, we can update the same action.
-        This function will create
-        `self.train_fn([state, action_one_hot, discount_reward])`
-        which would train the model.
-        """
-        action_prob_placeholder = model.output
-        action_onehot_placeholder = K.placeholder(shape=(None, model.output_shape[1]),
-                                                  name="action_onehot")
-        discount_reward_placeholder = K.placeholder(shape=(None,),
-                                                    name="discount_reward")
-
-        action_prob = K.sum(action_prob_placeholder * action_onehot_placeholder, axis=1)
-        log_action_prob = K.log(action_prob)
-
-        loss = - log_action_prob * discount_reward_placeholder
-        loss = K.mean(loss)
-
-        adam = optimizers.Adam()
-
-        updates = adam.get_updates(params=model.trainable_weights,
-                                   loss=loss)
-
-        return K.function(inputs=[model.input,
-                                action_onehot_placeholder,
-                                discount_reward_placeholder],
-                                outputs=[],
-                                updates=updates)
+        self.belief_state.save('belief_state.h5')
 
 
 def kl_divergence(true_state, belief_state):

@@ -8,17 +8,17 @@ def int_to_bit_array(num):
     arr = np.asarray(np.fromstring(_str, dtype='u1', count=64) - ord('0'))
     return np.reshape(arr, (1, 8, 8))
 
-
+# Bitwise not
 def bit_not(n, numbits=64):
     return (1 << numbits) - 1 - n
 
 
 class ReconBoard(Board):
+
     def __init__(self, fen=STARTING_FEN):
         super().__init__(fen=fen)
+        # Visible state emulates what JHUAPL website shows on its board while playing
         self.visible_state = [BaseBoard(), BaseBoard()]
-        self.belief_state = [self.get_current_state(False),
-                             self.get_current_state(True)]
         self.observation = [np.zeros((8, 8, 13), dtype='float32'),
                             np.zeros((8, 8, 13), dtype='float32')]
         self.sense_history = [[], []]
@@ -75,6 +75,9 @@ class ReconBoard(Board):
         self.restore_opp_pieces(not self.turn)
         return moves
 
+
+    # This function is taken from the python-chess library
+    # Only modification is making all pawn captures pseudo-legal
     def generate_moves(self, from_mask=BB_ALL, to_mask=BB_ALL):
         our_pieces = self.occupied_co[self.turn]
 
@@ -147,11 +150,13 @@ class ReconBoard(Board):
         is_legal = True
         dest_sq = move.to_square
         clear_squares = 0
-        # Empty observation
+        # Observations that are made as a result of this move are encoded by this var
         observation = np.zeros((8, 8, 13), dtype='float32')
 
-        # TODO: add observation from failed castling
-        # TODO: add observation from sliding pawn move
+        # TODO: Add observation from failed castling
+        # TODO: Add observation from sliding pawn move
+
+        # Castling is legal if the squares between the king and rook are empty
         if self.is_kingside_castling(move):
             cols = BB_FILE_F | BB_FILE_G
             squares = cols & backrank
@@ -169,6 +174,7 @@ class ReconBoard(Board):
                 is_legal = self.is_capture(move)
         elif (BB_SQUARES[move.from_square] &
               (self.bishops | self.rooks | self.queens)):
+            # Returns the new destination and a mask for all squares that were revealed to be empty
             dest_sq, clear_squares = self.adjust_sliding_move(move.from_square, move.to_square)
 
 
@@ -181,8 +187,10 @@ class ReconBoard(Board):
 
         capture = None
 
-        # Update visible board. Special case for promotion and castling needed
         if true_move != Move.null():
+
+            # Updates visible board. Moves pieces from from_square to to_square
+            # Special case for promotion and castling needed
             visible = self.visible_state[self.turn]
             if true_move.promotion is None:
                 visible.set_piece_at(true_move.to_square, visible.piece_at(true_move.from_square))
@@ -208,34 +216,15 @@ class ReconBoard(Board):
             from_file = square_file(true_move.from_square)
             to_rank = square_rank(true_move.to_square)
             to_file = square_file(true_move.to_square)
-            # If you capture something, update your opponent's visibility
             if capture:
+                # If you capture something, update your opponent's visibility
                 self.visible_state[not self.turn].remove_piece_at(true_move.to_square)
 
                 for i in range(6, 12):
                     # We observe a -1 for all their pieces on that square
                     observation[to_rank][to_file][i] = -1
-                    # They observe a 1 for all our pieces on that square
+                    # Our opponent observes a 1 for all our pieces on that square
                     self.observation[not self.turn][to_rank][to_file][i] = 1
-
-                self.belief_state[not self.turn][to_rank][to_file] = to_categorical(12, num_classes=13)
-
-            # Update our belief state
-            my_belief_state = self.belief_state[self.turn]
-
-            piece = self.piece_at(true_move.from_square).piece_type
-            if true_move.promotion:
-                piece = true_move.promotion
-            my_belief_state[from_rank][from_file] = to_categorical(12, num_classes=13)
-            my_belief_state[to_rank][to_file] = to_categorical(piece - 1, num_classes=13)
-            # Move the rook if castling
-            if self.is_castling(move):
-                rank = 0 if self.turn else 7
-                from_file = 7 if self.is_kingside_castling(move) else 0
-                to_file = 5 if self.is_kingside_castling(move) else 3
-
-                my_belief_state[rank][from_file] = to_categorical(12, num_classes=13)
-                my_belief_state[rank][to_file] = to_categorical(3, num_classes=13)
 
         self.observation[self.turn] = observation
 
@@ -292,6 +281,7 @@ class ReconBoard(Board):
 
         return dest_square, clear_squares
 
+    # Senses on the given square (0-63) and returns an observation on those squares
     # Any squares on the edge are moved inwards to make a 3x3 sqaure
     def sense(self, square):
         if square_file(square) == 0:
@@ -315,36 +305,37 @@ class ReconBoard(Board):
     def get_previous_sense(self):
         return self.sense_history[self.turn][-1] if len(self.sense_history[self.turn]) > 0 else 0
 
-    # Clear area in mask and then update with truth
-    def update_visible(self, visible, true, sense_mask):
-        visible &= ~sense_mask
-        return (visible | (sense_mask & true))
 
-    # The current player looks at the squares in the given mask
+    # Updates the visible board over the given mask and returns an observation over the mask
     def sense_mask(self, mask):
+        def update_visible(visible, true, sense_mask):
+            visible &= ~sense_mask
+            return (visible | (sense_mask & true))
+
         board = self.visible_state[self.turn]
 
-        board.pawns = self.update_visible(board.pawns, self.pawns, mask)
-        board.knights = self.update_visible(board.knights, self.knights, mask)
-        board.bishops = self.update_visible(board.bishops, self.bishops, mask)
-        board.rooks = self.update_visible(board.rooks, self.rooks, mask)
-        board.queens = self.update_visible(board.queens, self.queens, mask)
-        board.kings = self.update_visible(board.kings, self.kings, mask)
-        board.occupied = self.update_visible(board.occupied, self.occupied, mask)
-        board.occupied_co[not self.turn] = self.update_visible(board.occupied_co[not self.turn],
-                                                               self.occupied_co[not self.turn],
-                                                               mask)
+        board.pawns = update_visible(board.pawns, self.pawns, mask)
+        board.knights = update_visible(board.knights, self.knights, mask)
+        board.bishops = update_visible(board.bishops, self.bishops, mask)
+        board.rooks = update_visible(board.rooks, self.rooks, mask)
+        board.queens = update_visible(board.queens, self.queens, mask)
+        board.kings = update_visible(board.kings, self.kings, mask)
+        board.occupied = update_visible(board.occupied, self.occupied, mask)
+        board.occupied_co[not self.turn] = update_visible(board.occupied_co[not self.turn],
+                                                          self.occupied_co[not self.turn], mask)
 
-
-        # Returns numpy version of board with only pieces in
         return self.get_current_state(self.turn, mask)
 
+    # Returns the observation made during the previous move overlayed on top of
+    # an observation of all your pieces
     def get_pre_turn_observation(self):
         return np.add(self.observation[self.turn], self.my_pieces_observation(self.turn))
 
+    # Returns an observation of your own pieces
     def my_pieces_observation(self, color):
         return self.get_current_state(color, mask=self.occupied_co[color])
 
+    # Returns an observation of the current board
     def get_current_state(self, color, mask=BB_ALL):
         ranks = range(8) if color else range(7, -1, -1)
         squares = []
@@ -366,30 +357,7 @@ class ReconBoard(Board):
             squares.append(row)
         return np.asarray(squares)
 
-
-    def update_belief_state(self, color, opp_state):
-        my_pieces = self.belief_state[color][0:6]
-        self.belief_state[color] = np.vstack((my_pieces, opp_state))
-
-
-    def pieces_to_model_input(self, color):
-        return self._pieces_to_model_input(self, color)
-
-
-    def _pieces_to_model_input(self, board, color):
-        piece_names = ["pawns", "knights", "bishops", "rooks", "queens", "kings"]
-        pieces = []
-        for piece in piece_names:
-            num = getattr(board, piece) & board.occupied_co[color]
-            pieces.append(int_to_bit_array(num)[0])
-
-        return np.array(pieces)
-
-
-    def sense_to_array(self, sense_square):
-        return int_to_bit_array(BB_SQUARES[sense_square])
-
-
+    # Decodes a number to a move
     def get_move_from_model(self, move):
         starting_square = move // (7 * 8 + 8 + 9)
         _type = move % (7 * 8 + 8 + 9)
@@ -438,7 +406,7 @@ class ReconBoard(Board):
         else:
             return Move(starting_square, ending_square, promotion=promotion)
 
-
+    # Encodes a move as a number
     def get_model_num_from_move(self, move):
         directions = [-1, 1, -7, 7, -8, 8, -9, 9]
         knight_moves = [17, 15, 10, 6, -17, -15, -10, -6]
@@ -475,7 +443,7 @@ class ReconBoard(Board):
     def is_game_over(self):
         return self.result() is not None
 
-
+    # Redefine a win as when the opponent king is missing
     def result(self):
         if (self.kings & self.occupied_co[WHITE]) == 0:
             return -1
