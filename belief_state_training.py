@@ -2,7 +2,6 @@ from multiprocessing import Queue, Value
 from reconBoard import ReconBoard
 from chess import Move, SQUARE_NAMES, BaseBoard
 from models import ChessModel
-from keras.losses import kullback_leibler_divergence
 from keras.preprocessing import sequence
 from keras import backend as K
 import time
@@ -14,11 +13,15 @@ import random
 np.set_printoptions(threshold=np.nan, linewidth=2000, suppress=True)
 
 
+# This method plays games against itself and outputs the sequence of observations/board states to
+# the queue. This method can be run in parallel in multiple threads
 def self_play(should_play, queue):
     num_games = 0
     while True:
 
         while should_play.value:
+            # Sequence of moves to be played. If there are multiple moves at an index, one is
+            # chosen at random
             moves = [["e2e4", "a2a4", "h2h4"], ["e7e5"]]
             sensing = [[28], [28, 24, 31]]
 
@@ -63,6 +66,7 @@ def self_play(should_play, queue):
                 board.push(move)
                 ply_num += 1
 
+            # Convert array to numpy array
             for i in range(2):
                 belief_input_training[i] = np.asarray(belief_input_training[i])
                 belief_output_training[i] = np.asarray(belief_output_training[i])
@@ -83,11 +87,11 @@ def train_model():
     queue = Queue()
     should_play = Value('i', 1)
 
-    num_processes = 1
+    num_threads = 1
     train_iteration = 20
     model = ChessModel(hp, 1)
 
-    for i in range(num_processes):
+    for i in range(num_threads):
         thread = threading.Thread(name=str(i),
                                   target=self_play,
                                   args=(should_play, queue))
@@ -123,6 +127,8 @@ def train_model():
             _input = np.asarray(observations)
             _output = np.asarray(true_states)
 
+            # _input and _output are lists of list. Each list is a game. A game is a sequence of
+            # observations (input) with a corresponding sequence of true states (output)
             result = model.train_belief_state(_input, _output, 100)
             loss = result.history['loss'][-1]
             print(loss)
@@ -136,6 +142,8 @@ def train_model():
             should_play.value = 1
 
 
+# Tries different combinations of hyperparameters and sees which one performs the best in a fixed
+# amount of training time
 def hyper_opt():
     hp_space = {
         "num_conv": (1, 2, 3),
@@ -152,9 +160,9 @@ def hyper_opt():
     queue = Queue()
     should_play = Value('i', 1)
 
-    num_processes = 1
+    num_threads = 1
 
-    for i in range(num_processes):
+    for i in range(num_threads):
         thread = threading.Thread(name=str(i),
                                   target=self_play,
                                   args=(should_play, queue))
